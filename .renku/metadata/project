@@ -1,0 +1,39 @@
+{
+  "@renku_data_type": "renku.domain_model.project.Project",
+  "@renku_oid": "project",
+  "agent_version": "2.9.1",
+  "annotations": [],
+  "creator": {
+    "@renku_data_type": "renku.domain_model.provenance.agent.Person",
+    "@renku_data_value": {
+      "affiliation": null,
+      "alternate_name": null,
+      "email": "sophia.ly.16@gmail.com",
+      "id": "mailto:sophia.ly.16@gmail.com",
+      "name": "Sophia Ly"
+    }
+  },
+  "date_created": {
+    "@renku_data_type": "datetime.datetime",
+    "@renku_data_value": "2024-01-23T19:35:37.935633+00:00"
+  },
+  "description": "",
+  "id": "/projects/sophia.ly.16/master-thesis",
+  "image": null,
+  "keywords": [],
+  "minimum_renku_version": "2.8.0",
+  "name": "master_thesis",
+  "template_metadata": {
+    "@renku_data_type": "renku.domain_model.project.ProjectTemplateMetadata",
+    "@renku_data_value": {
+      "immutable_template_files": [],
+      "metadata": "{\"__template_source__\": \"https://github.com/SwissDataScienceCenter/renku-project-template\", \"__template_ref__\": \"0.7.1\", \"__template_id__\": \"python-minimal\", \"__namespace__\": \"sophia.ly.16\", \"__repository__\": \"https://gitlab.renkulab.io\", \"__sanitized_project_name__\": \"master-thesis\", \"__project_slug__\": \"sophia.ly.16/master-thesis\", \"__project_description__\": \"\", \"__renku_version__\": \"2.9.1\", \"name\": \"master_thesis\", \"__name__\": \"master_thesis\", \"__template_version__\": \"2e6af43c4bab1d97ac0fef947c118a49fdfbf7bc\", \"__automated_update__\": true}",
+      "ssh_supported": true,
+      "template_id": "python-minimal",
+      "template_ref": "0.7.1",
+      "template_source": "https://github.com/SwissDataScienceCenter/renku-project-template",
+      "template_version": "2e6af43c4bab1d97ac0fef947c118a49fdfbf7bc"
+    }
+  },
+  "version": 10
+}

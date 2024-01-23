@@ -6,9 +6,26 @@ name: "base"
 # impossible. To get permission to use Anaconda again you need to either pay or prove that
 # you meet the requirements for a free license. Using the conda-forge channel avoids 
 # these restrictions completely.
+
+# Removed: - pytorch::cpuonly # to be changed later once gpu is available
 channels:
   - conda-forge
-# dependencies:
-# - add packages here
-# - one per line
+  - pytorch
+  - nvidia
+dependencies:
+# - add packages here 
+  - matplotlib=3.7.2
+  - pytorch =2.1.1
+  - torchvision = 0.16.1
+  - pytorch-lightning=2.0.6
+ # - cudatoolkit=11.1
+  - pytorch-cuda=11.8
+  - pandas
+  - scikit-image
+  - pycocotools
+  - seaborn
+  - scikit-learn
+  - pip:
+    - wandb
 prefix: "/opt/conda"
+

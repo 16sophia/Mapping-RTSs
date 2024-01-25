@@ -442,7 +442,7 @@ class Model(pl.LightningModule):
         if len(iou_RTS_)==0: # no valid pairs: set to nan so that we don't return empty values
             iou_RTS = np.nan
         else:
-            iou_RTS = np.mean(iou_RTS_) 
+            iou_RTS = np.nanmean(iou_RTS_) 
             
         self.log("validation_bbox_iou", iou_RTS, on_step=True, on_epoch=True, batch_size=batch_size)
   
@@ -503,6 +503,13 @@ class Model(pl.LightningModule):
         F1_pixel_ = []
         iou_pixel_ = []
         
+        # performance level of binary mask
+        accuracy_img_ = []
+        precision_img_ = []
+        recall_img_ = []
+        F1_img_ = []
+        iou_img_ = []
+        
         # Loss of 
         classification_loss_ = []
         box_regression_loss_ = []
@@ -517,7 +524,6 @@ class Model(pl.LightningModule):
             if get_TP_ind:
                 acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, TP_ind, acc_img, precision_img, recall_img, f1_img, IoU_img = utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"], iou_thresholds, get_TP_ind)
                 RTS_TP_ = RTS_TP_ + TP_ind
-                
             else:
                 acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"],labels["boxes"],prediction["boxes"], iou_thresholds)).to(self.device_)
             # Performance metrics on image level
@@ -532,6 +538,12 @@ class Model(pl.LightningModule):
             recall_pixel_.append(recall_pixel)
             F1_pixel_.append(f1_pixel)
             iou_pixel_.append(IoU_pixel)
+            
+            accuracy_img_.append(acc_img)
+            precision_img_.append(precision_img)
+            recall_img_.append(recall_img)
+            F1_img_.append(f1_img)
+            iou_img_.append(IoU_img)
             
             # Calculate loss: classification, box regression, mask-----------------------------------------------------------
             iou_value = 0
@@ -587,7 +599,7 @@ class Model(pl.LightningModule):
                 if len(indices_y) == 0: # IoU was always 0 -> no pair found-> no loss can be calculated
                     continue
 
-                iou_value = np.mean(iou_i)
+                iou_value = np.nanmean(iou_i)
                 # truncate predicted RTS 
                 output["boxes"] = output["boxes"][indices_y]
                 output["labels"] = output["labels"][indices_y]
@@ -641,16 +653,23 @@ class Model(pl.LightningModule):
 
         # Average detection metrics
         # Performance metrics on image level
-        test_accuracy = np.mean([value for value in accuracy_])
-        test_precision = np.mean([value for value in precision_])
-        test_recall = np.mean([value for value in recall_])
-        test_F1 = np.mean([value for value in F1_])
+        test_accuracy = np.nanmean([value for value in accuracy_])
+        test_precision = np.nanmean([value for value in precision_])
+        test_recall = np.nanmean([value for value in recall_])
+        test_F1 = np.nanmean([value for value in F1_])
         # Performance metrics on RTS level
         accuracy_pixel = np.nanmean(accuracy_pixel_)
         precision_pixel = np.nanmean(precision_pixel_)
         recall_pixel = np.nanmean(recall_pixel_)
         F1_pixel = np.nanmean(F1_pixel_)
         IoU_pixel = np.nanmean(iou_pixel_)
+        # performance metric for binary image
+        accuracy_img = np.nanmean(accuracy_img_)
+        precision_img = np.nanmean(precision_img_)
+        recall_img = np.nanmean(recall_img_)
+        F1_img = np.nanmean(F1_img_)
+        IoU_img = np.nanmean(iou_img_)
+        
         if len(iou_RTS_)==0: # no valid pairs: set to nan so that we don't return empty values
             classification_loss = np.nan
             box_regression_loss = np.nan
@@ -661,9 +680,9 @@ class Model(pl.LightningModule):
             classification_loss = torch.mean(torch.stack(classification_loss_))
             box_regression_loss = torch.mean(torch.stack(box_regression_loss_))
             mask_loss = torch.mean(torch.stack(mask_loss_))
-            iou_RTS = np.mean(iou_RTS_)    
+            iou_RTS = np.nanmean(iou_RTS_)    
         if get_TP_ind:
-            return test_accuracy, test_precision, test_recall, test_F1, classification_loss, box_regression_loss, mask_loss, iou_RTS, RTS_TP_
+            return test_accuracy, test_precision, test_recall, test_F1, classification_loss, box_regression_loss, mask_loss, iou_RTS, RTS_TP_, accuracy_pixel, precision_pixel, recall_pixel, F1_pixel, IoU_pixel, accuracy_img, precision_img, recall_img, F1_img, IoU_img
         else:
-            return test_accuracy, test_precision, test_recall, test_F1, classification_loss, box_regression_loss, mask_loss, iou_RTS
+            return test_accuracy, test_precision, test_recall, test_F1, classification_loss, box_regression_loss, mask_loss, iou_RTS, accuracy_pixel, precision_pixel, recall_pixel, F1_pixel, IoU_pixel, accuracy_img, precision_img, recall_img, F1_img, IoU_img
        

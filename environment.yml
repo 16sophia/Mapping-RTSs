@@ -26,6 +26,7 @@ dependencies:
   - seaborn
   - scikit-learn
   - rasterio
+  - fiona
   - pip:
     - wandb
 prefix: "/opt/conda"

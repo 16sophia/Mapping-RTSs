@@ -25,6 +25,7 @@ dependencies:
   - pycocotools
   - seaborn
   - scikit-learn
+  - rasterio
   - pip:
     - wandb
 prefix: "/opt/conda"

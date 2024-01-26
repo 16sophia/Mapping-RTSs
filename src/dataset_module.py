@@ -10,7 +10,7 @@ import numpy as np
 import wandb
 import torchmetrics
 import warnings
-
+import rasterio
 
 from PIL import Image
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -155,9 +155,30 @@ class DEMDataset(torch.utils.data.Dataset):
             # Tilename of image
             tile = self.filename_list[idx]
             
+            # Get geoinformation of tif image
+            reference =  rasterio.open(img_path, nodata=-9999) 
+            meta = {
+                'driver': 'GTiff',
+                'count': 1, # save mask as single band image
+                'height': 256,
+                'width': 256,
+                'crs': reference.crs,
+                # Transform raster to georeferenced cooridnate: define min max coordinate 
+                'transform': rasterio.transform.from_bounds(
+                    west= reference.bounds[0],
+                    south= reference.bounds[1],
+                    east=reference.bounds[2],
+                    north=reference.bounds[3],
+                    width=reference.width,
+                    height=reference.height
+                ),
+                'dtype': 'int64'
+            }
+            
+            
             # Create annotation dictionary containing all the processed information
             annotations = {"boxes": boxes, "labels": labels, "masks": masks, "image_id": image_id, "area": area,
-               "iscrowd": iscrowd, "tile": tile, "num objs": num_objs}
+               "iscrowd": iscrowd, "tile": tile, "num objs": num_objs, "geo_meta":meta}
             
             # Transforms image from np.array to tensor & transforms dimension from (h, w, c) to (c,h,w) with torchvision transform function
             image = F.to_tensor(image).float()

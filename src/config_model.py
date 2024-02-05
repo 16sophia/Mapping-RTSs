@@ -64,7 +64,7 @@ def get_config(mean_sd, model = "baseline"):
             momentum=0.9, # considering past gradients: set too high-> slow convergence /divergence. Set too low-> no significant improvements over standard
             
             weight_decay=0.001, #  L2 regularization (discourages large weights): loss = loss + weight decay parameter * L2 norm of the weights
-            optimizer_config = "sgd", # adam/ sgd
+            optimizer_config = "adamW", # adam/ sgd
             betas=(0.9, 0.999), # Adam optimizer: coefficients used for computing running averages of gradient and its square 
             eps = 1e-8, #term added to the denominator to improve numerical stability 
             amsgrad = False, # whether to use the AMSGrad variant of this algorithm
@@ -88,8 +88,8 @@ def get_config(mean_sd, model = "baseline"):
         threshold_mask = 0.5 # threshold for preformance metric during testing
         
         #trainable_backbone_layers: number of trainable layers starting from final block (ranging from 0 - 5)
-        pretrained_network = maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT, trainable_backbone_layers=3) 
-        transformed_data = False
+        pretrained_network = maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT, trainable_backbone_layers=5) 
+        transformed_data = True
         change_min_box_axis = False
         return config_baseline, device, num_classes, worker_processes, gpu, gpu_device, threshold_mask, pretrained_network, transformed_data, change_min_box_axis
     
@@ -173,7 +173,7 @@ def get_config(mean_sd, model = "baseline"):
         change_min_box_axis = False
         #trainable_backbone_layers: number of trainable layers starting from final block (ranging from 0 - 5)
         pretrained_network = maskrcnn_resnet50_fpn(weights=None, trainable_backbone_layers=5) 
-        transformed_data = False
+        transformed_data = True
         return config_baseline, device, num_classes, worker_processes, gpu, gpu_device, threshold_mask, pretrained_network, transformed_data, change_min_box_axis
     
     if model == "baseline_cosinelr":

@@ -196,7 +196,7 @@ class Model(pl.LightningModule):
         # scheduler parameter: optimizer, T_0 – Number of iterations for first restart, T_mult – A factor increases T after start, eta_min– Minimum learning rate, last_epoch-The index of last epoch
         #scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 3, 1, self.min_lr, verbose=True)
         if self.lrscheduler == 'onplateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
         elif self.lrscheduler == 'cosinelr':
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 3, 1, self.min_lr, verbose=True)
         else:
@@ -255,28 +255,48 @@ class Model(pl.LightningModule):
         
         # Iterate over each batch
         for labels, output in zip(targets,preds):
-            acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(output["masks"], labels["masks"], labels["boxes"],output["boxes"])).to(self.device_)
+            # Nothing was predicted but object exist: set all metrics to 0
+            if len(labels["boxes"])>0 and len(output["boxes"]) ==0:
+                # Performance metrics on image level
+                accuracy_.append(torch.tensor(0.0).to(self.device_))
+                precision_.append(torch.tensor(0.0).to(self.device_))
+                recall_.append(torch.tensor(0.0).to(self.device_))
+                F1_.append(torch.tensor(0.0).to(self.device_))
+                # Performance metrics on RTS level
+                accuracy_pixel_.append(torch.tensor(0.0).to(self.device_))
+                precision_pixel_.append(torch.tensor(0.0).to(self.device_))
+                recall_pixel_.append(torch.tensor(0.0).to(self.device_))
+                F1_pixel_.append(torch.tensor(0.0).to(self.device_))
+                iou_pixel_.append(torch.tensor(0.0).to(self.device_))
+                # Performance metrics on pixel/ image
+                accuracy_img_.append(torch.tensor(0.0).to(self.device_))
+                precision_img_.append(torch.tensor(0.0).to(self.device_))
+                recall_img_.append(torch.tensor(0.0).to(self.device_))
+                F1_img_.append(torch.tensor(0.0).to(self.device_))
+                iou_img_.append(torch.tensor(0.0).to(self.device_))
+                
+            else:
+                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(output["masks"], labels["masks"], labels["boxes"],output["boxes"])).to(self.device_)
+
+                # Performance metrics on image level
+                accuracy_.append(accuracy_RTS)
+                precision_.append(precision_RTS)
+                recall_.append(recall_RTS)
+                F1_.append(F1_RTS)
+                # Performance metrics on RTS level
+                accuracy_pixel_.append(acc_pixel)
+                precision_pixel_.append(precision_pixel)
+                recall_pixel_.append(recall_pixel)
+                F1_pixel_.append(f1_pixel)
+                iou_pixel_.append(IoU_pixel)
+                # Performance metrics on pixel/ image
+                accuracy_img_.append(acc_img)
+                precision_img_.append(precision_img)
+                recall_img_.append(recall_img)
+                F1_img_.append(f1_img)
+                iou_img_.append(IoU_img)
             
-            # Performance metrics on image level
-            accuracy_.append(accuracy_RTS)
-            precision_.append(precision_RTS)
-            recall_.append(recall_RTS)
-            F1_.append(F1_RTS)
-            # Performance metrics on RTS level
-            accuracy_pixel_.append(acc_pixel)
-            precision_pixel_.append(precision_pixel)
-            recall_pixel_.append(recall_pixel)
-            F1_pixel_.append(f1_pixel)
-            iou_pixel_.append(IoU_pixel)
-            # Performance metrics on pixel/ image
-            accuracy_img_.append(acc_img)
-            precision_img_.append(precision_img)
-            recall_img_.append(recall_img)
-            F1_img_.append(f1_img)
-            iou_img_.append(IoU_img)
-            
-        
-        # Performance metrics on image level
+        # Performance metrics on RTS level
         train_accuracy = torch.nanmean(torch.stack(accuracy_)) 
         train_precision = torch.nanmean(torch.stack(precision_))
         train_recall = torch.nanmean(torch.stack(recall_)) 
@@ -286,18 +306,24 @@ class Model(pl.LightningModule):
         self.log("RTS_Recall_train", train_recall, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("RTS_F1_train", train_F1, on_step=True, on_epoch=True, batch_size=batch_size)
         
-        # Performance metrics on RTS level
+        
+        # Performance metrics on mask of detected RTS level
         accuracy_pixel = torch.nanmean(torch.tensor(accuracy_pixel_, dtype=torch.float))
+        if not accuracy_pixel >=0:
+            raise ValueError("accuracy_pixel is nan")
         precision_pixel = torch.nanmean(torch.tensor(precision_pixel_, dtype=torch.float))
         recall_pixel = torch.nanmean(torch.tensor(recall_pixel_, dtype=torch.float))
         F1_pixel = torch.nanmean(torch.tensor(F1_pixel_, dtype=torch.float))
         IoU_pixel = torch.nanmean(torch.tensor(iou_pixel_, dtype=torch.float))
+        if not IoU_pixel >=0:
+            raise ValueError("IoU_pixel is nan")
         self.log("Mask_accuracy_train", accuracy_pixel, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("Mask_precision_train", precision_pixel, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("Mask_recall_train", recall_pixel, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("Mask_F1_train", F1_pixel, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("Mask_IoU_train", IoU_pixel, on_step=True, on_epoch=True, batch_size=batch_size)
         
+        # Performance metric based on total pixel
         accuracy_img = torch.nanmean(torch.tensor(accuracy_img_, dtype=torch.float))
         precision_img =torch.nanmean(torch.tensor(precision_img_, dtype=torch.float))
         recall_img = torch.nanmean(torch.tensor(recall_img_, dtype=torch.float))
@@ -355,25 +381,45 @@ class Model(pl.LightningModule):
             
         # Iterate over images in batch
         for labels, prediction in zip(targets,preds):
-            acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"])).to(self.device_)
+            # Nothing was predicted but object exist: set all metrics to 0
+            if len(labels["boxes"])>0 and len(prediction["boxes"]) ==0:
+                # Performance metrics on image level
+                accuracy_.append(torch.tensor(0.0).to(self.device_))
+                precision_.append(torch.tensor(0.0).to(self.device_))
+                recall_.append(torch.tensor(0.0).to(self.device_))
+                F1_.append(torch.tensor(0.0).to(self.device_))
+                # Performance metrics on RTS level
+                accuracy_pixel_.append(torch.tensor(0.0).to(self.device_))
+                precision_pixel_.append(torch.tensor(0.0).to(self.device_))
+                recall_pixel_.append(torch.tensor(0.0).to(self.device_))
+                F1_pixel_.append(torch.tensor(0.0).to(self.device_))
+                iou_pixel_.append(torch.tensor(0.0).to(self.device_))
+                # Performance metrics on pixel/ image
+                accuracy_img_.append(torch.tensor(0.0).to(self.device_))
+                precision_img_.append(torch.tensor(0.0).to(self.device_))
+                recall_img_.append(torch.tensor(0.0).to(self.device_))
+                F1_img_.append(torch.tensor(0.0).to(self.device_))
+                iou_img_.append(torch.tensor(0.0).to(self.device_))
+            else:    
+                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"])).to(self.device_)
             
-            # Performance metrics on image level
-            accuracy_.append(accuracy_RTS)
-            precision_.append(precision_RTS)
-            recall_.append(recall_RTS)
-            F1_.append(F1_RTS)
-            # Performance metrics on pixel / detected RTS level
-            accuracy_pixel_.append(acc_pixel)
-            precision_pixel_.append(precision_pixel)
-            recall_pixel_.append(recall_pixel)
-            F1_pixel_.append(f1_pixel)
-            iou_pixel_.append(IoU_pixel)
-            # Performance metrics on pixel/ image
-            accuracy_img_.append(acc_img)
-            precision_img_.append(precision_img)
-            recall_img_.append(recall_img)
-            F1_img_.append(f1_img)
-            iou_img_.append(IoU_img)
+                # Performance metrics on image level
+                accuracy_.append(accuracy_RTS)
+                precision_.append(precision_RTS)
+                recall_.append(recall_RTS)
+                F1_.append(F1_RTS)
+                # Performance metrics on pixel / detected RTS level
+                accuracy_pixel_.append(acc_pixel)
+                precision_pixel_.append(precision_pixel)
+                recall_pixel_.append(recall_pixel)
+                F1_pixel_.append(f1_pixel)
+                iou_pixel_.append(IoU_pixel)
+                # Performance metrics on pixel/ image
+                accuracy_img_.append(acc_img)
+                precision_img_.append(precision_img)
+                recall_img_.append(recall_img)
+                F1_img_.append(f1_img)
+                iou_img_.append(IoU_img)
             
             # Calculate loss-----------------------------------------------------
             # Deep copy to make sure we don't change original data
@@ -521,32 +567,51 @@ class Model(pl.LightningModule):
         
         # Iterate over images in batch
         for labels, prediction in zip(targets,preds): # iterate trough tile / batch
-            if get_TP_ind:
-                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, TP_ind, acc_img, precision_img, recall_img, f1_img, IoU_img = utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"], iou_thresholds, get_TP_ind)
-                RTS_TP_ = RTS_TP_ + TP_ind
-            else:
-                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"],labels["boxes"],prediction["boxes"], iou_thresholds)).to(self.device_)
-            # Performance metrics on image level
-            accuracy_.append(accuracy_RTS)
-            precision_.append(precision_RTS)
-            recall_.append(recall_RTS)
-            F1_.append(F1_RTS)
-            
-            # Performance metrics on RTS level
-            accuracy_pixel_.append(acc_pixel)
-            precision_pixel_.append(precision_pixel)
-            recall_pixel_.append(recall_pixel)
-            F1_pixel_.append(f1_pixel)
-            iou_pixel_.append(IoU_pixel)
-            
-            accuracy_img_.append(acc_img)
-            precision_img_.append(precision_img)
-            recall_img_.append(recall_img)
-            F1_img_.append(f1_img)
-            iou_img_.append(IoU_img)
+            if len(labels["boxes"])>0 and len(prediction["boxes"]) ==0:
+                # Performance metrics on image level
+                accuracy_.append(torch.tensor(0.0).to(self.device_))
+                precision_.append(torch.tensor(0.0).to(self.device_))
+                recall_.append(torch.tensor(0.0).to(self.device_))
+                F1_.append(torch.tensor(0.0).to(self.device_))
+                # Performance metrics on RTS level
+                accuracy_pixel_.append(torch.tensor(0.0).to(self.device_))
+                precision_pixel_.append(torch.tensor(0.0).to(self.device_))
+                recall_pixel_.append(torch.tensor(0.0).to(self.device_))
+                F1_pixel_.append(torch.tensor(0.0).to(self.device_))
+                iou_pixel_.append(torch.tensor(0.0).to(self.device_))
+                # Performance metrics on pixel/ image
+                accuracy_img_.append(torch.tensor(0.0).to(self.device_))
+                precision_img_.append(torch.tensor(0.0).to(self.device_))
+                recall_img_.append(torch.tensor(0.0).to(self.device_))
+                F1_img_.append(torch.tensor(0.0).to(self.device_))
+                iou_img_.append(torch.tensor(0.0).to(self.device_))
+            else:   
+                if get_TP_ind:
+                    acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, TP_ind, acc_img, precision_img, recall_img, f1_img, IoU_img = utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"], iou_thresholds, get_TP_ind)
+                    RTS_TP_ = RTS_TP_ + TP_ind
+                else:
+                    acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"],labels["boxes"],prediction["boxes"], iou_thresholds)).to(self.device_)
+                # Performance metrics on image level
+                accuracy_.append(accuracy_RTS)
+                precision_.append(precision_RTS)
+                recall_.append(recall_RTS)
+                F1_.append(F1_RTS)
+
+                # Performance metrics on RTS level
+                accuracy_pixel_.append(acc_pixel)
+                precision_pixel_.append(precision_pixel)
+                recall_pixel_.append(recall_pixel)
+                F1_pixel_.append(f1_pixel)
+                iou_pixel_.append(IoU_pixel)
+
+                accuracy_img_.append(acc_img)
+                precision_img_.append(precision_img)
+                recall_img_.append(recall_img)
+                F1_img_.append(f1_img)
+                iou_img_.append(IoU_img)
             
             # Calculate loss: classification, box regression, mask-----------------------------------------------------------
-            iou_value = 0
+            iou_value = 0 # IoU of bbox
 
             # Deep copy to make sure we don't change original data
             output = {

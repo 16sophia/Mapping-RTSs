@@ -185,12 +185,6 @@ def performance_metric(y_true, y_pred):
     '''
     correct = torch.sum(y_true == y_pred).item()
     total = len(y_true)
-    
-    if total <0:
-        raise ValueError("labelled mask is empty, check def performance_metric")
-        
-    if total!= len(y_pred):
-        raise ValueError("mismatch of mask length")
         
     true_positives = torch.sum((y_true == 1) & (y_pred == 1)).item()
     false_positives = torch.sum((y_true == 0) & (y_pred == 1)).item()
@@ -229,25 +223,19 @@ def similarity_mask(results, pred_mask, targ_mask, mask_thr):
             recall_pixel.append(recall)
             f1_pixel.append(f1)
             IoU_pixel.append(IoU)
-        else:
-            accuracy, precision, recall, f1, IoU = np.nan, np.nan, np.nan, np.nan, np.nan
-            acc_pixel.append(accuracy)
-            precision_pixel.append(precision)
-            recall_pixel.append(recall)
-            f1_pixel.append(f1)
-            IoU_pixel.append(IoU)
+    if len(acc_pixel)==0: # Fill with one nan if nothing matched
+        accuracy, precision, recall, f1, IoU = np.nan, np.nan, np.nan, np.nan, np.nan
+        acc_pixel.append(accuracy)
+        precision_pixel.append(precision)
+        recall_pixel.append(recall)
+        f1_pixel.append(f1)
+        IoU_pixel.append(IoU)
             
     acc_pixel_ = torch.nanmean(torch.tensor(acc_pixel, dtype=torch.float))
     precision_pixel_ = torch.nanmean(torch.tensor(precision_pixel, dtype=torch.float))
     recall_pixel_ = torch.nanmean(torch.tensor(recall_pixel, dtype=torch.float))
     f1_pixel_ = torch.nanmean(torch.tensor(f1_pixel, dtype=torch.float))  
     IoU_pixel_ = torch.nanmean(torch.tensor(IoU_pixel, dtype=torch.float))  
-    # In case it is nan -> set to 0 so that logging per epoch is possible
-    acc_pixel_ = 0 if not acc_pixel_ >0 else acc_pixel_
-    precision_pixel_ = 0 if not precision_pixel_ >0 else precision_pixel_
-    recall_pixel_ = 0 if not recall_pixel_ >0 else recall_pixel_
-    f1_pixel_ = 0 if not f1_pixel_ >0 else f1_pixel_
-    IoU_pixel_ =0 if not IoU_pixel_ >0 else IoU_pixel_
     
     return acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_
     
@@ -279,8 +267,7 @@ def iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, th
         
         #### Calculate performance based on mask of detected RTS (BBox IoU >= 0.5): similarity_mask(matched_elements): ----------------------------------------------------------------------------------------------------------------------------------
         acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_ = similarity_mask(results, pred_mask, targ_mask, mask_thr)
-        if not IoU_pixel_ >=0:
-            raise ValueError("IoU_pixel_ is nan in iou_acc")        
+
         # Calculate performance based on whole pixel image (Not just detected RTS) -------------------------------------------------------------------
         # Sum all predictions instances and all labels instances to one image and make it binary
         if len(pred_mask) >0:
@@ -393,9 +380,7 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
             recall_pixel.append(recall_pixel_)
             f1_pixel.append(f1_pixel_)
             IoU_pixel.append(IoU_pixel_)
-            if not IoU_pixel_ >=0:
-                print(IoU_pixel_)
-                raise ValueError("IoU_pixel is nan in similarity_RTS")
+
                 
             # Check how many pixels in an imaeg are correctly detected
             acc_img.append(accuracy_img_)
@@ -410,7 +395,7 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
         recall_avg = torch.tensor(sum(recall_t)/len(iou_thresholds))
         F1_avg = torch.tensor(sum(F1_t)/len(iou_thresholds))
         
-        # metrics / pixel on RTS level: If pixel of RTS instance was detected (only taking binary masks of detected RTS into account)
+        # Mask, only pixel of detected RTS instance (only taking binary masks of detected RTS into account)
         acc_pixel_ = torch.nanmean(torch.tensor(acc_pixel, dtype=torch.float))
         precision_pixel = torch.nanmean(torch.tensor(precision_pixel, dtype=torch.float))
         recall_pixel = torch.nanmean(torch.tensor(recall_pixel, dtype=torch.float))
@@ -433,17 +418,19 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
     elif total_gt == 0: # TP= 0
         if total_pred > 0:
             if get_TP_ind: # all TP indices of predicted RTS are set to -1
-                return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, [-1]* len(total_pred),np.nan,np.nan,np.nan,np.nan,np.nan
+                return np.nan, np.nan,np.nan,np.nan,np.nan,0.0,0.0,np.nan,np.nan, [-1]* len(total_pred),0.0,0.0,np.nan,np.nan,np.nan
             else:
-                return np.nan, np.nan, np.nan, np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan
+                return np.nan, np.nan, np.nan, np.nan, np.nan,0.0,0.0,np.nan,np.nan,0.0,0.0,np.nan,np.nan,np.nan
         else:
             if get_TP_ind: 
                 return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, [],np.nan,np.nan,np.nan,np.nan,np.nan # no predicted RTS -> TP list is empty
+            else:
+                return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, np.nan,np.nan,np.nan,np.nan,np.nan 
     elif total_gt > 0 and total_pred == 0:
         if get_TP_ind: 
-            return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, [],np.nan,np.nan,np.nan,np.nan,np.nan # no predicted RTS -> TP list is empty
+            return np.nan, np.nan,np.nan,np.nan,np.nan,0.0,np.nan,0.0,np.nan, [],0.0,np.nan,0.0,np.nan,np.nan # no predicted RTS -> TP list is empty
         else:
-            return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, np.nan,np.nan,np.nan,np.nan,np.nan 
+            return np.nan, np.nan,np.nan,np.nan,np.nan,0.0,np.nan,0.0,np.nan, 0.0,np.nan,0.0,np.nan,np.nan 
     else:
         print("unhandled edgecase")
         return 

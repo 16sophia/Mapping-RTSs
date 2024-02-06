@@ -56,10 +56,10 @@ def get_config(mean_sd, model = "baseline"):
             project = "RTS_detection",
             architecture = "maskrcnn_resnet50_fpn",
             dataset_id = "scaled_DEM_difference",
-            lr=0.00001, # step size at which the model's weights are updated usually [0,1]
+            lr=0.0001, # step size at which the model's weights are updated usually [0,1]
             min_lr=0.0000001, # minimum learning rate if learning rate gradually reduces 
             epochs=150, # number of times the model will process the entire training dataset
-            batch_size= 4, # number of data samples processed together in each training iteration (forward and backward pass)
+            batch_size= 5, # number of data samples processed together in each training iteration (forward and backward pass)
             nesterov=False, # enables Nesterov momentum
             momentum=0.9, # considering past gradients: set too high-> slow convergence /divergence. Set too low-> no significant improvements over standard
             
@@ -89,7 +89,7 @@ def get_config(mean_sd, model = "baseline"):
         
         #trainable_backbone_layers: number of trainable layers starting from final block (ranging from 0 - 5)
         pretrained_network = maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT, trainable_backbone_layers=5) 
-        transformed_data = True
+        transformed_data = False
         change_min_box_axis = False
         return config_baseline, device, num_classes, worker_processes, gpu, gpu_device, threshold_mask, pretrained_network, transformed_data, change_min_box_axis
     

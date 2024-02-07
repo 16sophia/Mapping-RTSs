@@ -516,7 +516,7 @@ def get_config(mean_sd, model = "baseline"):
         gpu=  torch.cuda.is_available() # for trainer definition
         gpu_device = torch.cuda.device_count() # for trainer definition
         threshold_mask = 0.5 # threshold for preformance metric during testing
-        transformed_data = True
+        transformed_data = False
         change_min_box_axis = True
         
         #trainable_backbone_layers: number of trainable layers starting from final block (ranging from 0 - 5)

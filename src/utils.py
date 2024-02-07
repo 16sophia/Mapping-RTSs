@@ -28,7 +28,7 @@ def unravel_index(index, shape):
     return tuple(reversed(out))
 
 
-def analyze_preds(preds, tile_id, threshold_mask = 0.5):
+def analyze_preds(preds, img_, tile_id, threshold_mask = 0.5):
     '''
     Calcualte RTS characteristics for each predicted RTS
     '''
@@ -38,14 +38,17 @@ def analyze_preds(preds, tile_id, threshold_mask = 0.5):
     circularity_ = []
     solidity_ = []
     max_diameter_ = []
+    area_ = []
+    img_height = img_[tile_id][0].detach().numpy()
+    prediction = preds[tile_id]
 
-    for i in range(len(preds[tile_id]["labels"])): # Iterate through RTS/ tile
+    for i in range(len(prediction["labels"])): # Iterate through RTS/ tile
         RTS_mask = copy.deepcopy(preds[tile_id]["masks"][i].detach().numpy())
-        channel = 0
+        empty_dim = 0
         # intensity property
-        mask_boolean = RTS_mask[channel]
-        mean_intensity = np.nanmean(RTS_mask[0][mask_boolean >=threshold_mask ])
-        sd_intensity = np.std(RTS_mask[0][mask_boolean >=threshold_mask ])
+        mask_boolean = RTS_mask[empty_dim]
+        mean_intensity = np.nanmean(img_height[mask_boolean >=threshold_mask ])
+        sd_intensity = np.std(img_height[mask_boolean >=threshold_mask ])
         # Make mask binary
         mask_boolean[mask_boolean >=threshold_mask ] = 1
         mask_boolean[mask_boolean <threshold_mask ] = 0
@@ -58,6 +61,7 @@ def analyze_preds(preds, tile_id, threshold_mask = 0.5):
         circularity = (4*np.pi*pix_size)/(RTS_perimeter**2)
         solidity = mask_prop.solidity
         max_diameter = mask_prop.feret_diameter_max
+        area = mask_prop.area
         # Append values
         mean_intensity_.append(mean_intensity)
         sd_intensity_.append(sd_intensity)
@@ -65,7 +69,8 @@ def analyze_preds(preds, tile_id, threshold_mask = 0.5):
         circularity_.append(circularity)
         solidity_.append(solidity)
         max_diameter_.append(max_diameter)
-    return mean_intensity_, sd_intensity_, pix_size_, circularity_, solidity_, max_diameter_
+        area_.append(area)
+    return mean_intensity_, sd_intensity_, pix_size_, circularity_, solidity_, max_diameter_, area_
 
 def move_images(source_dir, destination_dir, all_ = True, to_move = None):
     '''

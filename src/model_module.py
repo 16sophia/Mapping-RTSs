@@ -501,7 +501,7 @@ class Model(pl.LightningModule):
             'scores': copy.deepcopy(prediction['scores'].detach())
             }
 
-            # Output contains batch dimension (only 1 entry), which target does not -> get rid of it to match them for loss calculation: n_RTS, batch, channel, h, w
+            # Prediction contains batch dimension (only 1 entry), which target (label) does not -> get rid of this dimension to match them for loss calculation: n_RTS, batch, channel, h, w
             output["masks"] = output["masks"][:, 0, :, :]
 
             # No RTS have been predicted, no RTS have been labelled: 0 loss

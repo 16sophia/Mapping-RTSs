@@ -234,6 +234,7 @@ class Model(pl.LightningModule):
         # Metrics calculated from Confusion matrix (TP, FP, FN) with iou_thresholds. TN is not taken into account since maskRCNN does not have empty images as input.----------------------------
         # Performance metrics on image level, RTS_accuracy = TP/(TP+FP+FN) , mean over different thresholds and mean over batch
         # Performance metrics on RTS/ image level: If RTS was detected based on IoU BBox >= 0.5
+        iou_RTS_ = []
         accuracy_ = []
         precision_ = []
         recall_ = []
@@ -257,9 +258,10 @@ class Model(pl.LightningModule):
         for labels, output in zip(targets,preds):
             # Nothing was predicted but object exist: set all metrics to 0
 
-            acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(output["masks"], labels["masks"], labels["boxes"],output["boxes"])).to(self.device_)
+            acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, iou_RTS, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(output["masks"], labels["masks"], labels["boxes"],output["boxes"])).to(self.device_)
 
             # Performance metrics on image level
+            iou_RTS_.append(iou_RTS)
             accuracy_.append(accuracy_RTS)
             precision_.append(precision_RTS)
             recall_.append(recall_RTS)
@@ -278,6 +280,7 @@ class Model(pl.LightningModule):
             iou_img_.append(IoU_img)
             
         # Performance metrics on RTS level
+        iou_RTS = torch.nanmean(torch.tensor(iou_RTS_, dtype=torch.float))
         train_accuracy = torch.nanmean(torch.stack(accuracy_)) 
         train_precision = torch.nanmean(torch.stack(precision_))
         train_recall = torch.nanmean(torch.stack(recall_)) 
@@ -286,6 +289,7 @@ class Model(pl.LightningModule):
         self.log("RTS_Precision_train", train_precision, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("RTS_Recall_train", train_recall, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("RTS_F1_train", train_F1, on_step=True, on_epoch=True, batch_size=batch_size)
+        self.log("train_bbox_iou", iou_RTS, on_step=True, on_epoch=True, batch_size=batch_size)
         
         
         # Performance metrics on mask of detected RTS level
@@ -335,10 +339,11 @@ class Model(pl.LightningModule):
         classification_loss_ = []
         box_regression_loss_ = []
         mask_loss_ = []
-        iou_RTS_ = [] # mean iou that do not take false positives and false negatives into acount
+       
         
         # Calculate detection metrics--------------------------------------------------
         # Performance metrics on RTS/ image level: If RTS was detected based on IoU BBox >= 0.5
+        iou_RTS_ = []
         accuracy_ = []
         precision_ = []
         recall_ = []
@@ -360,11 +365,11 @@ class Model(pl.LightningModule):
             
         # Iterate over images in batch
         for labels, prediction in zip(targets,preds):
-            # Nothing was predicted but object exist: set all metrics to 0
- 
-            acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"])).to(self.device_)
+
+            acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, iou_RTS, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"])).to(self.device_)
 
             # Performance metrics on image level
+            iou_RTS_.append(iou_RTS)
             accuracy_.append(accuracy_RTS)
             precision_.append(precision_RTS)
             recall_.append(recall_RTS)
@@ -382,80 +387,9 @@ class Model(pl.LightningModule):
             F1_img_.append(f1_img)
             iou_img_.append(IoU_img)
             
-            # Calculate loss-----------------------------------------------------
-            # Deep copy to make sure we don't change original data
-            output = {
-            'boxes': copy.deepcopy(prediction['boxes'].detach()),
-            'masks': copy.deepcopy(prediction['masks'].detach()),
-            'labels': copy.deepcopy(prediction['labels'].detach()),
-            'scores': copy.deepcopy(prediction['scores'].detach())
-            }
-
-            # Output contains batch dimension (only 1 entry), which target does not -> get rid of it to match them for loss calculation: [n_RTS, batch, channel, h, w] to [n_RTS, channel, h, w]
-            output["masks"] = output["masks"][:, 0, :, :]
-            # Calculate loss-----------------------------------------------------
-            # No RTS have been predicted, no RTS have been labelled: 0 loss
-                                
-            # TN have not been taken into account because too many empty images could skew result
-            # If instead perfect TN should be taken into account: 
-            '''
-            classification_loss_value = 0
-            box_regression_loss_value = 0
-            mask_loss_value = 0
-            iou_value = 1'''
-            
-            if labels["labels"].size()[0] == 0 and  output["labels"].size()[0] ==0:
-                continue
-
-            # RTS have been predicted but no RTS have been labelled: loss prediction not possible, skip to next batch
-            elif labels["labels"].size()[0] > 0 and  output["labels"].size()[0] ==0:
-                continue
-
-            # RTS have been predicted and RTS have been labelled 
-            else: 
-                # To calculate loss, both inputs have to have same length and IoU!= 0. We transform data accordingly (Truncate the ones with smalles IoU)-----------------------------------------------------
-                # intersection over union: result in matrix with predicted boxes (y axis)and labelled boxes (x axis)
-                iou = box_iou(output["boxes"],labels["boxes"]).detach()
-
-                # Truncate output or labels if number of predicted RTS does not equal to number of labelled RTS or where IoU=0-> otherwise losses are skewed because we cannot match the pairs
-                # Calculate max number of RTS that overlap -> number of RTS we will keep
-                min_l = min(labels["labels"].size()[0], output["labels"].size()[0])
-
-                # extract indices of RTS with n-max IoU where n = min_l = min. number of labelled or predicted RTS 
-                sorted_indices = torch.flip(torch.argsort(iou.flatten()), [0]) # sort in descending order
-                
-                indices_y = []
-                indices_x = []
-                iou_i = []
-                for i in sorted_indices[:min_l]:
-                    
-                    idy, idx = unravel_index(i.item(), iou.shape)
-                    if iou[idy, idx] <=0: # IoU is 0 -> we don't extract this RTS
-                        break
-                    else:
-                        iou_i.append(iou[idy, idx])
-                        indices_y.append(idy)
-                        indices_x.append(idx)
-                
-                if len(indices_y) == 0: # IoU was always 0 -> no pair found-> no loss can be calculated
-                    continue
-
-                iou_value = torch.nanmean(torch.tensor(iou_i))
-
-            # Append values
-            iou_RTS_.append(iou_value)
-  
-            
-        if len(iou_RTS_)==0: # no valid pairs: set to nan so that we don't return empty values
-            iou_RTS = np.nan
-        else:
-            iou_RTS = np.nanmean(iou_RTS_) 
-            
-        self.log("validation_bbox_iou", iou_RTS, on_step=True, on_epoch=True, batch_size=batch_size)
-  
-        
         
         # Performance metrics on image level
+        iou_RTS = torch.nanmean(torch.tensor(iou_RTS_, dtype=torch.float))
         validation_accuracy = torch.nanmean(torch.stack(accuracy_)) 
         validation_precision = torch.nanmean(torch.stack(precision_))
         validation_recall = torch.nanmean(torch.stack(recall_)) 
@@ -464,6 +398,7 @@ class Model(pl.LightningModule):
         self.log("RTS_validation_precision", validation_precision, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("RTS_validation_recall", validation_recall, on_step=True, on_epoch=True, batch_size=batch_size)
         self.log("RTS_validation_F1", validation_F1, on_step=True, on_epoch=True, batch_size=batch_size)
+        self.log("validation_bbox_iou", iou_RTS, on_step=True, on_epoch=True, batch_size=batch_size)
 
         
         # Performance metrics on RTS level
@@ -498,6 +433,7 @@ class Model(pl.LightningModule):
 
         # Calculate RTS detection metrics: RTS was detected based on IoU BBox >= 0.5--------------------------------------------------
         # Performance metrics on image level
+        iou_RTS_= []
         accuracy_ = []
         precision_ = []
         recall_ = []
@@ -530,11 +466,12 @@ class Model(pl.LightningModule):
         for labels, prediction in zip(targets,preds): # iterate trough tile / batch
 
             if get_TP_ind:
-                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, TP_ind, acc_img, precision_img, recall_img, f1_img, IoU_img = utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"], iou_thresholds, get_TP_ind)
+                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, iou_RTS, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, TP_ind, acc_img, precision_img, recall_img, f1_img, IoU_img = utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"], iou_thresholds, get_TP_ind)
                 RTS_TP_ = RTS_TP_ + TP_ind
             else:
-                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"],labels["boxes"],prediction["boxes"], iou_thresholds)).to(self.device_)
+                acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, iou_RTS, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, acc_img, precision_img, recall_img, f1_img, IoU_img = torch.Tensor(utils.similarity_RTS(prediction["masks"], labels["masks"],labels["boxes"],prediction["boxes"], iou_thresholds)).to(self.device_)
             # Performance metrics on image level
+            iou_RTS_.append(iou_RTS)
             accuracy_.append(accuracy_RTS)
             precision_.append(precision_RTS)
             recall_.append(recall_RTS)
@@ -597,70 +534,68 @@ class Model(pl.LightningModule):
                 iou_i = []
                 for i in sorted_indices[:min_l]:
                     idy, idx = np.unravel_index(i, iou.shape)
-                    if iou[idy, idx] <=0: # IoU is 0 -> we don't extract this RTS
-                        break
-                    else:
+                    if iou[idy, idx] >0: # IoU>0
                         iou_i.append(iou[idy, idx])
                         indices_y.append(idy)
                         indices_x.append(idx)
+                    
+                if len(indices_y)> 0: # Pair found: Calculate loss
+                    # truncate predicted RTS 
+                    output["boxes"] = output["boxes"][indices_y]
+                    output["labels"] = output["labels"][indices_y]
+                    output["scores"] = output["scores"][indices_y]
+                    # Extract matrix dimension
+                    output["masks"] = output["masks"][[indices_y]]
 
-                if len(indices_y) == 0: # IoU was always 0 -> no pair found-> no loss can be calculated
-                    continue
+                    # truncate labelled RTS
+                    labels["labels"] = labels["labels"][indices_x]
+                    labels["boxes"] = labels["boxes"][indices_x]
+                    # Extract matrix dimension. First dimension is # predicted labels indices
+                    labels["masks"] = labels["masks"][[indices_x]]
 
-                iou_value = np.nanmean(iou_i)
-                # truncate predicted RTS 
-                output["boxes"] = output["boxes"][indices_y]
-                output["labels"] = output["labels"][indices_y]
-                output["scores"] = output["scores"][indices_y]
-                # Extract matrix dimension
-                output["masks"] = output["masks"][[indices_y]]
+                    # Get losses-----------------------------------------------------
+                    # Extract values needed
+                    class_logits = output['scores'].detach()
+                    box_regression = output['boxes'].detach()
+                    mask_prediction = output['masks'].detach()
 
-                # truncate labelled RTS
-                labels["labels"] = labels["labels"][indices_x]
-                labels["boxes"] = labels["boxes"][indices_x]
-                # Extract matrix dimension. First dimension is # predicted labels indices
-                labels["masks"] = labels["masks"][[indices_x]]
+                    # Transoform class_logits. 
+                    # class_logits: only logit of class 1 given -> We have to calculate logits for  background class               
 
-                # Get losses-----------------------------------------------------
-                # Extract values needed
-                class_logits = output['scores'].detach()
-                box_regression = output['boxes'].detach()
-                mask_prediction = output['masks'].detach()
+                    for obj in range(output['labels'].size()[0]):
+                        background = 1 - class_logits[obj]
+                        class_logits_i = torch.cat([torch.unsqueeze(class_logits[obj], dim=0), torch.unsqueeze(background, dim=0)], dim=0)
+                        # Create first tensor
+                        if obj == 0: 
+                            class_logits_ = class_logits_i
+                        elif obj ==1:
+                            class_logits_ = torch.stack([class_logits_, class_logits_i], dim=0)
+                        else:
+                             class_logits_ = torch.cat([class_logits_, class_logits_i.unsqueeze(0)], dim=0)
 
-                # Transoform class_logits. 
-                # class_logits: only logit of class 1 given -> We have to calculate logits for  background class               
-         
-                for obj in range(output['labels'].size()[0]):
-                    background = 1 - class_logits[obj]
-                    class_logits_i = torch.cat([torch.unsqueeze(class_logits[obj], dim=0), torch.unsqueeze(background, dim=0)], dim=0)
-                    # Create first tensor
-                    if obj == 0: 
-                        class_logits_ = class_logits_i
-                    elif obj ==1:
-                        class_logits_ = torch.stack([class_logits_, class_logits_i], dim=0)
-                    else:
-                         class_logits_ = torch.cat([class_logits_, class_logits_i.unsqueeze(0)], dim=0)
+                    # class_logits: Add another dimension to fit crossentropyloss input dimension. Get rid of batch dimension in predicted RTS mask
+                    while class_logits_.dim() < 2:
+                        class_logits_ = torch.unsqueeze(class_logits_, dim=0)
 
-                # class_logits: Add another dimension to fit crossentropyloss input dimension. Get rid of batch dimension in predicted RTS mask
-                while class_logits_.dim() < 2:
-                    class_logits_ = torch.unsqueeze(class_logits_, dim=0)
-
-                # Calculate loss
-                classification_loss_value = nn.functional.cross_entropy(class_logits_, labels['labels'])
-                #box_regression_loss_value = box_regression_loss(box_regression, labels['boxes'])
-                box_regression_loss_value = nn.functional.smooth_l1_loss(box_regression, labels['boxes'],beta=1 / 9, reduction="sum")
-                mask_loss_value = nn.functional.binary_cross_entropy_with_logits(mask_prediction.squeeze(), labels['masks'].squeeze().float())
-
+                    # Calculate loss
+                    classification_loss_value = nn.functional.cross_entropy(class_logits_, labels['labels'])
+                    #box_regression_loss_value = box_regression_loss(box_regression, labels['boxes'])
+                    box_regression_loss_value = nn.functional.smooth_l1_loss(box_regression, labels['boxes'],beta=1 / 9, reduction="sum")
+                    mask_loss_value = nn.functional.binary_cross_entropy_with_logits(mask_prediction.squeeze(), labels['masks'].squeeze().float())
+                else: # IoU was always 0 -> no pair found-> no loss can be calculated
+                    classification_loss_value = torch.tensor(float('nan'))
+                    box_regression_loss_value= torch.tensor(float('nan'))
+                    mask_loss_value = torch.tensor(float('nan'))
             # Performance metrics on image level
             classification_loss_.append(classification_loss_value)
             box_regression_loss_.append(box_regression_loss_value)
             mask_loss_.append(mask_loss_value)
-            iou_RTS_.append(iou_value)
             round+=1
 
 
         # Average detection metrics
         # Performance metrics on image level
+        iou_RTS = np.nanmean([value for value in iou_RTS_])
         test_accuracy = np.nanmean([value for value in accuracy_])
         test_precision = np.nanmean([value for value in precision_])
         test_recall = np.nanmean([value for value in recall_])
@@ -679,15 +614,15 @@ class Model(pl.LightningModule):
         IoU_img = np.nanmean(iou_img_)
         
         if len(iou_RTS_)==0: # no valid pairs: set to nan so that we don't return empty values
-            classification_loss = np.nan
-            box_regression_loss = np.nan
-            mask_loss = np.nan
-            iou_RTS = np.nan
+            classification_loss = torch.tensor(float('nan'))
+            box_regression_loss = torch.tensor(float('nan'))
+            mask_loss = torch.tensor(float('nan'))
+            iou_RTS = torch.tensor(float('nan'))
         else:
             # Average loss metrics
-            classification_loss = torch.mean(torch.stack(classification_loss_))
-            box_regression_loss = torch.mean(torch.stack(box_regression_loss_))
-            mask_loss = torch.mean(torch.stack(mask_loss_))
+            classification_loss = torch.nanmean(torch.stack(classification_loss_))
+            box_regression_loss = torch.nanmean(torch.stack(box_regression_loss_))
+            mask_loss = torch.nanmean(torch.stack(mask_loss_))
             iou_RTS = np.nanmean(iou_RTS_)    
         if get_TP_ind:
             return test_accuracy, test_precision, test_recall, test_F1, classification_loss, box_regression_loss, mask_loss, iou_RTS, RTS_TP_, accuracy_pixel, precision_pixel, recall_pixel, F1_pixel, IoU_pixel, accuracy_img, precision_img, recall_img, F1_img, IoU_img

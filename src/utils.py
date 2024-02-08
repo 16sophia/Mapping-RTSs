@@ -262,15 +262,14 @@ def iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, th
         match_quality_matrix = box_iou(src_boxes,pred_boxes) # IoU between all pairs of bounding boxes: result in matrix with labelled boxes (y axis)and predicted boxes (x axis)
         results = matcher(match_quality_matrix) 
         
+        
+        # Set label to 1 (for TP) else -1 (FP)
         if get_TP_ind:
             RTS_TP_ind = copy.deepcopy(results)
             RTS_TP_ind[RTS_TP_ind>=0] = 1
             RTS_TP_ind = RTS_TP_ind.tolist()
-
-        true_positive = max(torch.count_nonzero(results.unique() != -1),0) # number of matched bounding boxes that have a valid match
-        matched_elements = results[results > -1]
         
-        #### Calculate performance based on mask of detected RTS (BBox IoU >= 0.5): similarity_mask(matched_elements): ----------------------------------------------------------------------------------------------------------------------------------
+        #### Calculate performance based on mask of detected RTS (BBox IoU >= 0.5): similarity_mask(matched elements): ----------------------------------------------------------------------------------------------------------------------------------
         acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_ = similarity_mask(results, pred_mask, targ_mask, mask_thr)
 
         # Calculate performance based on whole pixel image (Not just detected RTS) -------------------------------------------------------------------
@@ -294,7 +293,17 @@ def iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, th
         accuracy_img, precision_img, recall_img, f1_img, IoU_img = performance_metric(targ_binary.flatten(), pred_binary.flatten())
         
         # Calculate performance based on RTS detection -----------------------------------------------------------------------------------------
+        # IoU of RTS bbox 
+        n_entries = max(len(src_boxes), len(pred_boxes))
+        iout_RTS = list(match_quality_matrix[match_quality_matrix>0].detach().numpy())
+        # Fill with 0 where no match was made
+        difference = n_entries-len(iout_RTS)
+        for i in range(difference):
+            iout_RTS.append(0)
+        iout_RTS_ = np.nanmean(iout_RTS)
         #in Matcher, a pred element can be matched only twice
+        true_positive = max(torch.count_nonzero(results.unique() != -1),0) # number of matched bounding boxes that have a valid match
+        matched_elements = results[results > -1]
         # false_positive = sum of unmatched predicted bounding boxes and predicted bounding boxes that have more than two matches
         false_positive = torch.count_nonzero(results == -1) + ( len(matched_elements) - len(torch.unique(matched_elements)))
         false_negative = total_gt - true_positive
@@ -317,9 +326,9 @@ def iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, th
         
         
         if get_TP_ind:
-            return acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, acc, precision, recall, F1, RTS_TP_ind, accuracy_img, precision_img, recall_img, f1_img, IoU_img
+            return acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, iout_RTS_, acc, precision, recall, F1, RTS_TP_ind, accuracy_img, precision_img, recall_img, f1_img, IoU_img
         else:
-            return acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, acc, precision, recall, F1, accuracy_img, precision_img, recall_img, f1_img, IoU_img
+            return acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, iout_RTS_, acc, precision, recall, F1, accuracy_img, precision_img, recall_img, f1_img, IoU_img
 
 def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds = [0.5], get_TP_ind = False, mask_thr=0.5):
     '''
@@ -345,6 +354,7 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
     if total_gt > 0 and total_pred > 0:
         # Check how many RTS are detected
         # Metrics / RTS on image level: If RTS was detected based on IoU BBox >= 0.5
+        iou_RTS_ = []
         acc_t = []
         precision_t = []
         recall_t = []
@@ -368,12 +378,13 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
         # metric for each threshold
         for t in iou_thresholds:
             if get_TP_ind:
-                acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, acc, precision, recall, F1, RTS_TP,  accuracy_img_, precision_img_, recall_img_, f1_img_, IoU_img_= iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, t, get_TP_ind)
+                acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, iou_RTS, acc, precision, recall, F1, RTS_TP,  accuracy_img_, precision_img_, recall_img_, f1_img_, IoU_img_= iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, t, get_TP_ind)
                 RTS_TP_t = RTS_TP_t+RTS_TP     
                 
             else:
-                acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, acc, precision, recall, F1, accuracy_img_, precision_img_, recall_img_, f1_img_, IoU_img_ = iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, t)
+                acc_pixel_, precision_pixel_, recall_pixel_, f1_pixel_, IoU_pixel_, iou_RTS, acc, precision, recall, F1, accuracy_img_, precision_img_, recall_img_, f1_img_, IoU_img_ = iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, t)
             # Metrics / RTS on image levell: If RTS was detected based on IoU BBox >= 0.5
+            iou_RTS_.append(iou_RTS)
             acc_t.append(acc)
             precision_t.append(precision)
             recall_t.append(recall)
@@ -395,6 +406,7 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
             IoU_img.append(IoU_img_)
 
         # Metrics / RTS on image level
+        iou_avg = torch.nanmean(torch.tensor(iou_RTS_, dtype=torch.float))
         acc_avg = torch.tensor(sum(acc_t) / len(iou_thresholds))
         precision_avg = torch.tensor(sum(precision_t)/len(iou_thresholds))
         recall_avg = torch.tensor(sum(recall_t)/len(iou_thresholds))
@@ -415,27 +427,27 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
         IoU_img = torch.nanmean(torch.tensor(IoU_img, dtype=torch.float))
             
         if get_TP_ind:
-            return acc_pixel_, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, acc_avg, precision_avg, recall_avg, F1_avg, RTS_TP_t, acc_img_, precision_img, recall_img, f1_img, IoU_img
+            return acc_pixel_, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, iou_avg, acc_avg, precision_avg, recall_avg, F1_avg, RTS_TP_t, acc_img_, precision_img, recall_img, f1_img, IoU_img
         else:
-            return acc_pixel_, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, acc_avg, precision_avg, recall_avg, F1_avg, acc_img_, precision_img, recall_img, f1_img, IoU_img
+            return acc_pixel_, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, iou_avg, acc_avg, precision_avg, recall_avg, F1_avg, acc_img_, precision_img, recall_img, f1_img, IoU_img
 
     # There are no labelled RTS 
     elif total_gt == 0: # TP= 0
         if total_pred > 0:
-            if get_TP_ind: # all TP indices of predicted RTS are set to -1
-                return np.nan, np.nan,np.nan,np.nan,np.nan,0.0,0.0,np.nan,np.nan, [-1]* len(total_pred),0.0,0.0,np.nan,np.nan,np.nan
+            if get_TP_ind: # all TP indices of predicted RTS are set to -1: accuracy and precision = 0 on image and RTS level
+                return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan, 0.0,0.0,np.nan,np.nan, [-1]* len(total_pred),0.0,0.0,np.nan,np.nan,np.nan
             else:
-                return np.nan, np.nan, np.nan, np.nan, np.nan,0.0,0.0,np.nan,np.nan,0.0,0.0,np.nan,np.nan,np.nan
+                return np.nan, np.nan, np.nan, np.nan, np.nan,np.nan,0.0,0.0,np.nan,np.nan,0.0,0.0,np.nan,np.nan,np.nan
         else:
             if get_TP_ind: 
-                return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, [],np.nan,np.nan,np.nan,np.nan,np.nan # no predicted RTS -> TP list is empty
+                return np.nan, np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, [],np.nan,np.nan,np.nan,np.nan,np.nan # no predicted RTS -> TP list is empty
             else:
-                return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, np.nan,np.nan,np.nan,np.nan,np.nan 
+                return np.nan, np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan, np.nan,np.nan,np.nan,np.nan,np.nan 
     elif total_gt > 0 and total_pred == 0:
-        if get_TP_ind: 
-            return np.nan, np.nan,np.nan,np.nan,np.nan,0.0,np.nan,0.0,np.nan, [],0.0,np.nan,0.0,np.nan,np.nan # no predicted RTS -> TP list is empty
+        if get_TP_ind: # accuracy and recall are set to zero
+            return np.nan, np.nan, np.nan,np.nan,np.nan,np.nan,0.0,np.nan,0.0,np.nan, [],0.0,np.nan,0.0,np.nan,np.nan # no predicted RTS -> TP list is empty
         else:
-            return np.nan, np.nan,np.nan,np.nan,np.nan,0.0,np.nan,0.0,np.nan, 0.0,np.nan,0.0,np.nan,np.nan 
+            return np.nan, np.nan, np.nan,np.nan,np.nan,np.nan,0.0,np.nan,0.0,np.nan, 0.0,np.nan,0.0,np.nan,np.nan 
     else:
         print("unhandled edgecase")
         return 

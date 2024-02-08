@@ -196,7 +196,7 @@ class Model(pl.LightningModule):
         # scheduler parameter: optimizer, T_0 – Number of iterations for first restart, T_mult – A factor increases T after start, eta_min– Minimum learning rate, last_epoch-The index of last epoch
         #scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 3, 1, self.min_lr, verbose=True)
         if self.lrscheduler == 'onplateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
         elif self.lrscheduler == 'cosinelr':
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 3, 1, self.min_lr, verbose=True)
         else:

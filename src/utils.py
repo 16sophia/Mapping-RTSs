@@ -480,18 +480,25 @@ def postprocess_iou(output, threshold_mask=0.5, iou_min = 0.25):
             keep_i.append(True)
 
     # truncate predictions accordingly
-    boolean_mask = torch.tensor(keep_i)
-    transf_box = output["boxes"][boolean_mask] 
-    transf_labels = output["labels"][boolean_mask]
-    transf_scores = output["scores"][boolean_mask]
-    transf_mask = output["masks"][boolean_mask]
+    if len(keep_i)>0:
+        boolean_mask = torch.tensor(keep_i)
+        transf_box = output["boxes"][boolean_mask] 
+        transf_labels = output["labels"][boolean_mask]
+        transf_scores = output["scores"][boolean_mask]
+        transf_mask = output["masks"][boolean_mask]
+    else:
+        transf_box = output["boxes"]
+        transf_labels = output["labels"]
+        transf_scores = output["scores"]
+        transf_mask = output["masks"]
     return transf_box, transf_labels, transf_scores, transf_mask
 
-def postprocess_slope(output, slope_img, min_max, degree_thresh = 25, threshold_mask=0.5, threshold_onslope = 0.8):
+def postprocess_slope(output, slope_img, min_max, degree_thresh = 25, threshold_mask=0.5, threshold_onslope = 0.8, scaled = False):
     # Create boolean high_slope where slope is too high to contain RTS.
     # RTS should not appear at slope > 20 -> degree_thresh = 25
-    degree_thresh_scaled = (degree_thresh-min_max.slope_min[0]) /(min_max.slope_max[0]-min_max.slope_min[0])
-    high_slope = slope_img >= degree_thresh_scaled
+    if scaled:
+        degree_thresh = (degree_thresh-min_max.slope_min[0]) /(min_max.slope_max[0]-min_max.slope_min[0])
+    high_slope = slope_img >= degree_thresh
     
     keep_i = []
     for predicted_i in range(len(output["boxes"])):
@@ -507,11 +514,17 @@ def postprocess_slope(output, slope_img, min_max, degree_thresh = 25, threshold_
         else:
             keep_i.append(True)
     # truncate predictions accordingly
-    boolean_mask = torch.tensor(keep_i)
-    transf_box = output["boxes"][boolean_mask] 
-    transf_labels = output["labels"][boolean_mask]
-    transf_scores = output["scores"][boolean_mask]
-    transf_mask = output["masks"][boolean_mask]
+    if len(keep_i)>0:
+        boolean_mask = torch.tensor(keep_i)
+        transf_box = output["boxes"][boolean_mask] 
+        transf_labels = output["labels"][boolean_mask]
+        transf_scores = output["scores"][boolean_mask]
+        transf_mask = output["masks"][boolean_mask]
+    else:
+        transf_box = output["boxes"]
+        transf_labels = output["labels"]
+        transf_scores = output["scores"]
+        transf_mask = output["masks"]
     return transf_box, transf_labels, transf_scores, transf_mask
 #######################################################
       

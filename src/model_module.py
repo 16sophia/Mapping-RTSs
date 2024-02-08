@@ -613,7 +613,7 @@ class Model(pl.LightningModule):
         F1_img = np.nanmean(F1_img_)
         IoU_img = np.nanmean(iou_img_)
         
-        if len(iou_RTS_)==0: # no valid pairs: set to nan so that we don't return empty values
+        if len(iou_RTS_)==0 or len(classification_loss_)==0: # no valid pairs: set to nan so that we don't return empty values
             classification_loss = torch.tensor(float('nan'))
             box_regression_loss = torch.tensor(float('nan'))
             mask_loss = torch.tensor(float('nan'))

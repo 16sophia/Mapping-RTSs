@@ -361,7 +361,8 @@ def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3)
     recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
     IoU = true_positives / (false_positives + true_positives + false_negatives) if (precision + recall) > 0 else 0
-    print('accuracy:', accuracy, 'precision:', precision, 'recall:', recall, 'f1:', f1, 'IoU:', IoU)
+    accuracy,precision, recall, f1, IoU = np.round([accuracy,precision, recall, f1, IoU], 2)
+    print(f'Accuracy: {accuracy}, Precision: {precision}, Recall: {recall}, F1: {f1}, IoU: {IoU}')
 
     # Create a 3D NumPy array for the RGB image------------------------------------------
     pred_rgb_mask = np.zeros((*pred_tot_img.shape, 3), dtype=np.uint8)

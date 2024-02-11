@@ -10,6 +10,7 @@ import copy
 import sklearn.metrics as skmetrics
 import rasterio
 import shapely
+import skimage
 
 from torchvision import transforms
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -603,7 +604,7 @@ def create_watername(original_tile):
     water_name_below_right = '_'.join(['watermask',y2_low, x2_right, y1_low, x1_right]) + '.tif'    
     return water_name, water_name_below,water_name_above,water_name_left,water_name_right, water_name_above_left, water_name_above_right, water_name_below_left, water_name_below_right
 
-def apply_watermask(target, prediciton, site_name, threshold_outside_water = 0.5):
+def apply_watermask(target, prediciton, site_name, test_path, threshold_outside_water = 0.5):
     '''
     If RTS is less than threshold_outside_water % outside of water, it is removed
     Uses create_watername () function
@@ -634,7 +635,6 @@ def apply_watermask(target, prediciton, site_name, threshold_outside_water = 0.5
         water_dir = 'data/Sophia/data_clean/watermask_tuktoyaktuk_merged'
     else:
         print('Sitename is invalid')
-
     water_merge = [] # to store all tiles to be merged
     water_file = os.path.join(water_dir, water_name)
     water_tile = rasterio.open(water_file)

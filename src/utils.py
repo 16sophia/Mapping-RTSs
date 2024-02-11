@@ -7,6 +7,9 @@ import os
 import random
 import shutil
 import copy
+import sklearn.metrics as skmetrics
+import rasterio
+import shapely
 
 from torchvision import transforms
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -14,7 +17,9 @@ from torchvision.models.detection._utils import Matcher
 from torchvision.ops.boxes import box_iou
 from collections import defaultdict, deque
 from skimage.measure import regionprops
-import sklearn.metrics as skmetrics
+from rasterio.features import geometry_mask
+from rasterio.merge import merge
+
 
 def unravel_index(index, shape):
     '''
@@ -525,6 +530,209 @@ def postprocess_slope(output, slope_img, min_max, degree_thresh = 25, threshold_
         transf_labels = output["labels"]
         transf_scores = output["scores"]
         transf_mask = output["masks"]
+    return transf_box, transf_labels, transf_scores, transf_mask
+
+def create_watername(original_tile):
+    '''
+    In order to apply water mask for postprocessing.
+    Some images are on multiple water tiles -> before merging we need to find the names. 
+    Watertile is numbered: nord to south: descending [10,9,...1]. west to east: descending [10,9,...1]
+    '''
+    y1 = int(original_tile[3])
+    x1 = int(original_tile[4])
+    y2 = int(original_tile[1])
+    x2 = int(original_tile[2])
+
+    # below: y is lower
+    if y1>2:
+        y1_low = str(y1-1)
+        y2_low = str(y2)
+        x1_low = str(x1)
+        x2_low = str(x2)
+    else:
+        y1_low = str(10)
+        y2_low = str(y2-1)
+        x1_low = str(x1)
+        x2_low = str(x2)
+
+    # above
+    if y1<=9:
+        y1_above = str(y1+1)
+        y2_above = str(y2)
+        x1_above = str(x1)
+        x2_above = str(x2)
+    else:
+        y1_above = str(1)
+        y2_above = str(y2+1)
+        x1_above = str(x1)
+        x2_above = str(x2)  
+
+    # left: x is higher (for image not tile, it is the other way around)
+    if x1<=9:
+        y1_left = str(y1)
+        y2_left = str(y2)
+        x1_left = str(x1+1)
+        x2_left = str(x2)
+    else:
+        y1_left = str(y1)
+        y2_left = str(y2)
+        x1_left = str(1)
+        x2_left = str(x2+1)     
+
+    # right:
+    if x1>2:
+        y1_right = str(y1)
+        y2_right = str(y2)
+        x1_right = str(x1-1)
+        x2_right = str(x2)
+    else:
+        y1_right = str(y1)
+        y2_right = str(y2)
+        x1_right = str(10)
+        x2_right = str(x2-1)  
+        
+    water_name = '_'.join(['watermask',str(y2), str(x2), str(y1), str(x1)]) + '.tif'
+    water_name_below = '_'.join(['watermask',y2_low, x2_low, y1_low, x1_low]) + '.tif'
+    water_name_above = '_'.join(['watermask',y2_above, x2_above, y1_above, x1_above]) + '.tif'
+    water_name_left = '_'.join(['watermask',y2_left, x2_left, y1_left, x1_left]) + '.tif'
+    water_name_right = '_'.join(['watermask',y2_right, x2_right, y1_right, x1_right]) + '.tif'
+    
+    water_name_above_left = '_'.join(['watermask',y2_above, x2_left, y1_above, x1_left]) + '.tif'
+    water_name_above_right = '_'.join(['watermask',y2_above, x2_right, y1_above, x1_right]) + '.tif'
+    water_name_below_left = '_'.join(['watermask',y2_low, x2_left, y1_low, x1_left]) + '.tif'
+    water_name_below_right = '_'.join(['watermask',y2_low, x2_right, y1_low, x1_right]) + '.tif'    
+    return water_name, water_name_below,water_name_above,water_name_left,water_name_right, water_name_above_left, water_name_above_right, water_name_below_left, water_name_below_right
+
+def apply_watermask(target, prediciton, site_name, threshold_outside_water = 0.5):
+    '''
+    If RTS is less than threshold_outside_water % outside of water, it is removed
+    Uses create_watername () function
+    All watertiles that are touching the image are merged. The range of the image is cropped out from the watertile. This cropped watertile is multiplied with the predicted mask to 
+    calculate how much of the RTS is outside of water
+    '''
+                    
+    # Read tilename
+    image_name =target['tile']
+    name_part = image_name.split('_')
+    tile_name = ('_').join(name_part[1:6])
+
+    # create watermask file name
+    original_tile = tile_name.split('_')
+
+    water_name, water_name_below,water_name_above,water_name_left,water_name_right, water_name_above_left, water_name_above_right, water_name_below_left, water_name_below_right = create_watername(original_tile)
+
+    # Check if image is on multiple tiles, read all itles which are intersecting the image
+    image_part = image_name.split('_')
+    img_y = image_part[-2]
+    img_x = image_part[-1][:-4]
+    image_part
+
+    # Read water tiles and neighbour water tiles
+    if site_name == 'peel':
+        water_dir = 'data/Sophia/data_clean/watermask_Peel_merged'
+    elif site_name == 'tukto':
+        water_dir = 'data/Sophia/data_clean/watermask_tuktoyaktuk_merged'
+    else:
+        print('Sitename is invalid')
+
+    water_merge = [] # to store all tiles to be merged
+    water_file = os.path.join(water_dir, water_name)
+    water_tile = rasterio.open(water_file)
+    water_merge.append(water_tile)
+
+    # img is on two tiles at the bottom:
+    if  int(img_y) ==0: # below
+        water_file_below = os.path.join(water_dir, water_name_below)
+        water_tile_below = rasterio.open(water_file_below)
+        water_merge.append(water_tile_below)
+        #print('below')
+        if int(img_x) == 8: # belowright
+            water_file_below_right = os.path.join(water_dir, water_name_below_right)
+            water_tile_below_right = rasterio.open(water_file_below_right)
+            water_merge.append(water_tile_below_right)
+            #print('below')
+        elif int(img_x) == 0: #belowleft
+            water_file_below_left = os.path.join(water_dir, water_name_below_left)
+            water_tile_below_left = rasterio.open(water_file_below_left)
+            water_merge.append(water_tile_below_left) 
+            #print('below')
+
+    if int(img_y) == 8: # above
+        water_file_above = os.path.join(water_dir, water_name_above)
+        water_tile_above = rasterio.open(water_file_above)
+        water_merge.append(water_tile_above)
+        #print('above')
+        if int(img_x) == 8: # aboveright
+            water_file_above_right = os.path.join(water_dir, water_name_above_right)
+            water_tile_above_right = rasterio.open(water_file_above_right)
+            water_merge.append(water_tile_above_right)
+            #print('above')
+        elif int(img_x)==0: #above left
+            water_file_above_left = os.path.join(water_dir, water_name_above_left)
+            water_tile_above_left = rasterio.open(water_file_above_left)
+            water_merge.append(water_tile_above_left)
+            #print('above')
+
+    if int(img_x)== 8: # right
+        water_file_right = os.path.join(water_dir, water_name_right)
+        water_tile_right = rasterio.open(water_file_right)
+        water_merge.append(water_tile_right)    
+        #print('right')
+
+    if int(img_x) == 0: #left
+        water_file_left = os.path.join(water_dir, water_name_left)
+        water_tile_left = rasterio.open(water_file_left)
+        water_merge.append(water_tile_left)
+        #print('right')
+
+    # merge neighbour water tiles
+    merged_water, merged_transf = merge(water_merge)
+    # Make water tiles binary
+    merged_water = merged_water[0]
+    merged_water[merged_water>0]= 2 
+    merged_water[merged_water<= -9999]= 2 # For undefined values
+    merged_water[merged_water <= 0] = 1
+    
+    # Create a cropping mask with the boundary of input image
+    image_file = os.path.join(test_path, 'images',image_name)
+    image_tile = rasterio.open(image_file)
+    mask_geometry = [shapely.geometry.box(*image_tile.bounds)]
+    mask_array = geometry_mask(mask_geometry, out_shape=merged_water.shape, transform = merged_transf, invert=True)   
+    croped_water = merged_water*mask_array
+    # Find the top-left, top-right, bottom-left, and bottom-right of the image corners
+    # Find indices where the value is 1
+    indices = np.where(croped_water >0)
+
+    top_left = (min(indices[0]), min(indices[1]))
+    bottom_right = (max(indices[0]), max(indices[1]))
+    extracted_water = croped_water[top_left[0]:bottom_right[0]+1, top_left[1]:bottom_right[1]+1]
+    # resize and make water = 0 rest 1
+    water_mask_img = skimage.transform.resize(extracted_water, image_tile.shape, mode='constant', order=1)
+    water_mask_img[water_mask_img<1.5]=0
+    water_mask_img[water_mask_img>0] = 1
+    
+    keep_i = []
+    for predicted_i in range(len(prediciton['labels'])):
+        predicted_RTS = prediciton['masks'][predicted_i][0].detach().numpy() # 0 is for channel
+        outside_water = water_mask_img * predicted_RTS
+        outside_water_fraction = outside_water.sum() / predicted_RTS.sum()
+        if outside_water_fraction < threshold_outside_water:
+            keep_i.append(False)
+            print('remove')
+        else:
+            keep_i.append(True)
+
+    if len(keep_i)>0:
+        boolean_mask = torch.tensor(keep_i)
+        transf_box = prediciton["boxes"][boolean_mask] 
+        transf_labels = prediciton["labels"][boolean_mask]
+        transf_scores = prediciton["scores"][boolean_mask]
+        transf_mask = prediciton["masks"][boolean_mask]
+    else:
+        transf_box = prediciton["boxes"]
+        transf_labels = prediciton["labels"]
+        transf_scores = prediciton["scores"]
+        transf_mask = prediciton["masks"]
     return transf_box, transf_labels, transf_scores, transf_mask
 #######################################################
       

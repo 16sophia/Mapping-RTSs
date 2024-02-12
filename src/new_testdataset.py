@@ -10,7 +10,7 @@ import numpy as np
 import wandb
 import torchmetrics
 import warnings
-
+import rasterio
 
 from PIL import Image
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -24,9 +24,13 @@ from torchvision.models.detection import maskrcnn_resnet50_fpn
 from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 from src.engine import train_one_epoch, evaluate
 from src.transforms import get_transform
+'''
+Dataset creater which enables empty images. Can only be used for testing, not training.
+
+'''
 
 
-class DEMDataset(torch.utils.data.Dataset):
+class testDataset(torch.utils.data.Dataset):
     def __init__(self, root, n_channel, channel_list):
         '''
         Constructor, creating initial object of DEMDataset(root, transforms)
@@ -108,13 +112,67 @@ class DEMDataset(torch.utils.data.Dataset):
         # By first inserting two axis to 1 dimensional obj_ids with [:, None, None] to enable elementwise comparison between obj_ids nd mask
         masks = mask == obj_ids[:, None, None]
         
-        # Catch case where image is empty (full of 0 or NaN) or mask is empty: delete data and skip to next one
-        # Can be used as image preprocessing step to delete invalid tiles through one time iteration
-        if image.max() <= 0 or np.isnan(image.max()) or num_objs < 1:
-            warnings.warn(f"Dataset at index {idx} is invalid. Setting NaN.Skipped {self.filename_list[idx]}")
-            #print(f"skipped {self.filename_list[idx]}")
-            del self.filename_list[idx]
-            return np.nan
+        # Catch case where image is empty (full of 0 or NaN) or mask is empty: Give arbitary values. 
+        if image.max() <= 0 or np.isnan(image.max()) or num_objs < 1: 
+            box = []
+            for i in range(num_objs):
+                xmin = 0
+                xmax = 1
+                ymin = 0
+                ymax = 1
+                box.append([xmin, ymin, xmax, ymax])
+
+            # convert everything into a torch.Tensor, no deep copy
+            boxes = torch.as_tensor(box, dtype=torch.float32)
+            masks = torch.as_tensor(masks, dtype=torch.uint8)
+
+            # Calculate box area
+            # product of height (ymax - ymin) & width (xmax - xmin) 
+            if num_objs > 0:
+                area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+            else:
+                area = 0
+
+            # Create class labels and iscrowd label
+            # Each obj belongs to RTS class, therefore labels is a tensor filled with 1
+            labels = torch.ones((num_objs,), dtype=torch.int64)
+            # deep copy with torch.tensor
+            image_id = int(idx)
+            # suppose all instances are not-crowd: RTS are not heavily overlapping
+            iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
+
+            # Tilename of image
+            tile = self.filename_list[idx]
+            
+            # Get geoinformation of tif image
+            reference =  rasterio.open(img_path, nodata=-9999) 
+            meta = {
+                'driver': 'GTiff',
+                'count': 1, # save mask as single band image
+                'height': 256,
+                'width': 256,
+                'crs': reference.crs,
+                # Transform raster to georeferenced cooridnate: define min max coordinate 
+                'transform': rasterio.transform.from_bounds(
+                    west= reference.bounds[0],
+                    south= reference.bounds[1],
+                    east=reference.bounds[2],
+                    north=reference.bounds[3],
+                    width=reference.width,
+                    height=reference.height
+                ),
+                'dtype': 'int64'
+            }
+            
+            
+            # Create annotation dictionary containing all the processed information
+            annotations = {"boxes": boxes, "labels": labels, "masks": masks, "image_id": image_id, "area": area,
+               "iscrowd": iscrowd, "tile": tile, "num objs": num_objs, "geo_meta":meta}
+            
+            # Transforms image from np.array to tensor & transforms dimension from (h, w, c) to (c,h,w) with torchvision transform function
+            image = F.to_tensor(image).float()
+
+            return image, annotations
  
         # Calculate boundary box
         else: # image is not empty
@@ -155,9 +213,30 @@ class DEMDataset(torch.utils.data.Dataset):
             # Tilename of image
             tile = self.filename_list[idx]
             
+            # Get geoinformation of tif image
+            reference =  rasterio.open(img_path, nodata=-9999) 
+            meta = {
+                'driver': 'GTiff',
+                'count': 1, # save mask as single band image
+                'height': 256,
+                'width': 256,
+                'crs': reference.crs,
+                # Transform raster to georeferenced cooridnate: define min max coordinate 
+                'transform': rasterio.transform.from_bounds(
+                    west= reference.bounds[0],
+                    south= reference.bounds[1],
+                    east=reference.bounds[2],
+                    north=reference.bounds[3],
+                    width=reference.width,
+                    height=reference.height
+                ),
+                'dtype': 'int64'
+            }
+            
+            
             # Create annotation dictionary containing all the processed information
             annotations = {"boxes": boxes, "labels": labels, "masks": masks, "image_id": image_id, "area": area,
-               "iscrowd": iscrowd, "tile": tile, "num objs": num_objs}
+               "iscrowd": iscrowd, "tile": tile, "num objs": num_objs, "geo_meta":meta}
             
             # Transforms image from np.array to tensor & transforms dimension from (h, w, c) to (c,h,w) with torchvision transform function
             image = F.to_tensor(image).float()

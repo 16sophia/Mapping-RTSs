@@ -506,14 +506,17 @@ class Model(pl.LightningModule):
 
             # No RTS have been predicted, no RTS have been labelled: 0 loss
             if labels["labels"].size()[0] == 0 and  output["labels"].size()[0] ==0:
-                    classification_loss_value = 0
-                    box_regression_loss_value = 0
-                    mask_loss_value = 0
+                    classification_loss_value = torch.tensor(0.0)
+                    box_regression_loss_value = torch.tensor(0.0)
+                    mask_loss_value = torch.tensor(0.0)
                     iou_value = 1
-            # RTS have been predicted but no RTS have been labelled: loss prediction not possible, skip to next batch
+            # No RTS have been predicted but RTS have been labelled: loss prediction not possible, skip to next batch
             elif labels["labels"].size()[0] > 0 and  output["labels"].size()[0] ==0:
                 continue
-
+            # RTS have been predicted but no RTS have been labelled: loss prediction not possible, skip to next batch    
+            elif labels["labels"].size()[0] == 0 and  output["labels"].size()[0] >0:
+                continue
+                
             # RTS have been predicted and RTS have been labelled 
             else: 
                 # Truncate prediction and labels to have same size-------------------------------------------------------

@@ -441,7 +441,7 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
     elif total_gt == 0: # TP= 0
         if total_pred > 0:
             if get_TP_ind: # all TP indices of predicted RTS are set to -1: accuracy and precision = 0 on image and RTS level
-                return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan, 0.0,0.0,np.nan,np.nan, [-1]* total_pred,0.0,0.0,np.nan,np.nan,np.nan
+                return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan, 0.0,0.0,np.nan,np.nan, [-2]* total_pred,0.0,0.0,np.nan,np.nan,np.nan
             else:
                 return np.nan, np.nan, np.nan, np.nan, np.nan,np.nan,0.0,0.0,np.nan,np.nan,0.0,0.0,np.nan,np.nan,np.nan
         else:

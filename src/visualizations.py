@@ -8,6 +8,7 @@ from skimage.color import label2rgb
 from matplotlib.colors import Normalize
 from skimage.color import label2rgb
 from torchvision.ops.boxes import box_iou
+from matplotlib.colors import LinearSegmentedColormap
 
 def combine_masks(masks):
     """
@@ -311,6 +312,19 @@ def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3)
     img_index = index of image within batch, viz_max, viz_min = capping value of image for divergent value, default is 3,= -3. otherwise will be scaled: (-3 -img_min)/ (img_max-img_min)
     
     '''
+    html_red = '#d7191c'    # Red
+    html_red2 = '#fdae61'
+    html_white = '#FFFFFF'  # White
+    html_green = '#1a9641'  # Green
+    html_green2 = '#a6d96a'
+
+    # Convert HTML color codes to RGB
+    red = tuple(int(html_red[i:i+2], 16) / 255.0 for i in (1, 3, 5))
+    red2 = tuple(int(html_red2[i:i+2], 16) / 255.0 for i in (1, 3, 5))
+    white = tuple(int(html_white[i:i+2], 16) / 255.0 for i in (1, 3, 5))
+    green = tuple(int(html_green[i:i+2], 16) / 255.0 for i in (1, 3, 5))
+    green2 = tuple(int(html_green2[i:i+2], 16) / 255.0 for i in (1, 3, 5))
+    cmap = LinearSegmentedColormap.from_list('rg', [red, red2, white, green2, green], N=256)
 
     channel = 0
     img = img_org[img_index][channel]
@@ -325,7 +339,7 @@ def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3)
 
     # Make Grayscale image to RGB with diverging color
     gray_image = np.clip(img, viz_min, viz_max) 
-    cmap = plt.get_cmap('RdYlGn')
+    #cmap = plt.get_cmap('RdYlGn')
     norm = Normalize(vmin=gray_image.min(), vmax=gray_image.max())
     image_RGB = cmap(norm(gray_image), bytes=True)[:,:,:3]
 

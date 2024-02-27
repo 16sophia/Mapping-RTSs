@@ -464,7 +464,6 @@ class Model(pl.LightningModule):
         
         # Iterate over images in batch
         for labels, prediction in zip(targets,preds): # iterate trough tile / batch
-
             if get_TP_ind:
                 acc_pixel, precision_pixel, recall_pixel, f1_pixel, IoU_pixel, iou_RTS, accuracy_RTS, precision_RTS, recall_RTS, F1_RTS, TP_ind, acc_img, precision_img, recall_img, f1_img, IoU_img = utils.similarity_RTS(prediction["masks"], labels["masks"], labels["boxes"],prediction["boxes"], iou_thresholds, get_TP_ind)
                 RTS_TP_ = RTS_TP_ + TP_ind

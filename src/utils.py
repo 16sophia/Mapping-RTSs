@@ -301,12 +301,13 @@ def iou_acc(total_gt , pred_mask, targ_mask, mask_thr, src_boxes, pred_boxes, th
         # Calculate performance based on RTS detection -----------------------------------------------------------------------------------------
         # IoU of RTS bbox 
         n_entries = max(len(src_boxes), len(pred_boxes))
-        iout_RTS = list(match_quality_matrix[match_quality_matrix>0].detach().numpy())
+        iout_RTS = list(match_quality_matrix[match_quality_matrix>0].to('cpu'))
         # Fill with 0 where no match was made
         difference = n_entries-len(iout_RTS)
         for i in range(difference):
-            iout_RTS.append(0)
-        iout_RTS_ = np.nanmean(iout_RTS)
+            iout_RTS.append(torch.tensor(0.0))
+        
+        iout_RTS_ = torch.nanmean(torch.stack(iout_RTS))
         #in Matcher, a pred element can be matched only twice
         true_positive = max(torch.count_nonzero(results.unique() != -1),0) # number of matched bounding boxes that have a valid match
         matched_elements = results[results > -1]
@@ -358,6 +359,7 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
     
     # There are labelled RTS and predicted RTS
     if total_gt > 0 and total_pred > 0:
+        #print('total_gt',total_gt, 'total_pred',total_pred)
         # Check how many RTS are detected
         # Metrics / RTS on image level: If RTS was detected based on IoU BBox >= 0.5
         iou_RTS_ = []
@@ -441,6 +443,7 @@ def similarity_RTS(pred_mask, targ_mask, src_boxes, pred_boxes, iou_thresholds =
     elif total_gt == 0: # TP= 0
         if total_pred > 0:
             if get_TP_ind: # all TP indices of predicted RTS are set to -1: accuracy and precision = 0 on image and RTS level
+                print('FP on empty image')
                 return np.nan, np.nan,np.nan,np.nan,np.nan,np.nan, 0.0,0.0,np.nan,np.nan, [-2]* total_pred,0.0,0.0,np.nan,np.nan,np.nan
             else:
                 return np.nan, np.nan, np.nan, np.nan, np.nan,np.nan,0.0,0.0,np.nan,np.nan,0.0,0.0,np.nan,np.nan,np.nan

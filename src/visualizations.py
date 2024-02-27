@@ -35,6 +35,11 @@ def rgb_to_grayscale(rgb_matrix):
     grayscale_matrix = grayscale_matrix.astype(np.uint8)
     return grayscale_matrix
 
+def binary_to_grayscale(binary_matrix):
+    grayscale_matrix = binary_matrix * 255  # Assuming 255 represents white in grayscale
+    grayscale_matrix = grayscale_matrix.astype(np.uint8)
+    return grayscale_matrix
+
 def viz_bounding_box(ds, sample_index, threshold_mask = 0.5, batch_pred = None): 
     ''' 
     Visualizes all predicted bounding box and the corresponding mask in red. If targeted bounding box matches (according to bounding box iou), it will be shown in green. If it does not match, it will be shown in third pannel (unmatched labelled mask). Images are ordered according to the iou between boundary boxes (descending).
@@ -340,7 +345,7 @@ def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3)
     # Make Grayscale image to RGB with diverging color
     gray_image = np.clip(img, viz_min, viz_max) 
     #cmap = plt.get_cmap('RdYlGn')
-    norm = Normalize(vmin=gray_image.min(), vmax=gray_image.max())
+    norm = Normalize(vmin=viz_min, vmax=viz_max)
     image_RGB = cmap(norm(gray_image), bytes=True)[:,:,:3]
 
     # Combine all target masks to one img & make it RGB
@@ -403,6 +408,11 @@ def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3)
 
     blended_label = image_RGB.copy()
     blended_label[:, :, :3] = np.where(targ_rgb_mask, targ_rgb_viz[:, :, :3], image_RGB[:, :, :3])
+    
+    targ_tot_img_viz = np.where(targ_tot_img >= 0.5, 0, 1)
+    #plt.imshow(targ_tot_img_viz)
+    #grayscale_matrix = rgb_to_grayscale(blended_label) # blended_label
+    grayscale_matrix = binary_to_grayscale(targ_tot_img_viz)
 
 
     fig, axs = plt.subplots(1, 2, figsize=(10, 10))
@@ -411,7 +421,8 @@ def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3)
     axs[1].set_title('Predicted mask')
     axs[1].imshow(blended_prediction[:,:,:])   
 
-    grayscale_matrix = rgb_to_grayscale(blended_label)
     fig, axs = plt.subplots(1, 1, figsize=(5, 5))
     axs.set_title('Labelled vs. predicted')
-    axs.imshow(label2rgb(pred_tot_img, grayscale_matrix, bg_label=0))
+    axs.imshow(label2rgb(label=pred_tot_img, image=grayscale_matrix, bg_label=0, image_alpha=0.5, saturation=1))
+
+  

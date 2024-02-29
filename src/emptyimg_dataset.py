@@ -1,31 +1,16 @@
+import numpy as np
 import os
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
-import torchvision.transforms.functional as F
-import src.utils as utils
-import pytorch_lightning as pl
-import torch
-import numpy as np
 import wandb
 import torchmetrics
 import warnings
 import rasterio
 
 from PIL import Image
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import WandbLogger
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor, MaskRCNN
+from torchvision.models.detection.mask_rcnn import MaskRCNN
 from torchvision.transforms import functional as F
-from torchvision.models.detection import maskrcnn_resnet50_fpn
-from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
-from src.engine import train_one_epoch, evaluate
-from src.transforms import get_transform
 '''
-Dataset created which enables empty images. Can only be used for testing, not training.
+Creates Dataset for Mask-RCNN application: enables empty images. Can only be used for testing, not training.
 
 '''
 

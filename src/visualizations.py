@@ -1,12 +1,10 @@
-import copy
-import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import copy
+import torch
 import matplotlib
-
 from skimage.color import label2rgb
 from matplotlib.colors import Normalize
-from skimage.color import label2rgb
 from torchvision.ops.boxes import box_iou
 from matplotlib.colors import LinearSegmentedColormap
 

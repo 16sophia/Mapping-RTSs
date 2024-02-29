@@ -1,11 +1,26 @@
 import torch
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
+'''
+This file defines all the model parameter configurations. They can all be accessed with get_config() function below.
+All possible models: 
+- frozen_model: all layers but the last fully connected layer, classification layer, bbox predictor and mask predictor layer in the region of interest head are frozen and not updated during training
+  pretrained weights are from COCO
+- baseline: all four stages of the ResNet 50 backbone are trainable. Using pretrained weights from COCO
+- random_weights: all four stages of the ResNet 50 backbone are trainable. No pretrained weights, starts with random weights. 
+- final_model: ResNet 50 backbone with pre-trained COCO weights with all layers set to trainable. It is trained with the adamW optimizer, with the starting learning rate set to 0.0001, which decreases by 0.5 if the sum loss does not improve for 3 epochs. The model incorporates an additional slope channel, removes predicted bounding boxes with a minimum axis lower than 1, applies dropout and non-maximum suppression.
+
+Other configs where explored: 
+- default_drop_out: explores how dropout affects baseline model
+- baseline_cosinelr: explores cosine learning rate scheduler
+- aspect_slope_default: includes aspect and slopein baseline model
+- default_min_box_axis: 
+- default_non_maximum_supression
+- transformed_data
+
+'''
 
 def get_config(mean_sd, model = "baseline"):
-    '''
-    Baseline: trained on 2016 data. Default 
-    '''
     if model == "frozen_model":
         config_baseline = dict(
             project = "RTS_detection",
@@ -474,7 +489,7 @@ def get_config(mean_sd, model = "baseline"):
         return config_baseline, device, num_classes, worker_processes, gpu, gpu_device, threshold_mask, pretrained_network, transformed_data
 
     
-    if model == "final_model":
+    if model == "final_model":  
         ''''
         Bsaeline with 0.001 and adamW
         slope

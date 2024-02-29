@@ -25,12 +25,12 @@ from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 from src.engine import train_one_epoch, evaluate
 from src.transforms import get_transform
 '''
-Dataset creater which enables empty images. Can only be used for testing, not training.
+Dataset created which enables empty images. Can only be used for testing, not training.
 
 '''
 
 
-class testDataset(torch.utils.data.Dataset):
+class emptyimg_Dataset(torch.utils.data.Dataset):
     def __init__(self, root, n_channel, channel_list):
         '''
         Constructor, creating initial object of DEMDataset(root, transforms)

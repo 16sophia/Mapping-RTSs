@@ -21,6 +21,64 @@ from skimage.measure import regionprops
 from rasterio.features import geometry_mask
 from rasterio.merge import merge
 
+from shapely.geometry import shape
+import rasterio
+from rasterio.features import shapes
+import fiona
+from shapely.geometry import Polygon, mapping
+def extract_shp(prediction, target, img_i, root_path, RTS_id, batch_i):
+    '''
+    Creates a georeferenced tif file for each prediction mask.
+    Combines all predictions together into one shapefile
+    
+    '''
+    my_schema = {
+    'geometry': 'Polygon',
+    'properties': {'id': 'int'}
+    }
+    n_instance_pred = prediction[img_i]['masks'].shape[0]
+    for instance in range(n_instance_pred):
+        instance_mask = prediction[img_i]['masks'][instance].detach().numpy()
+        instance_mask = (instance_mask >= 0.5).astype(int)
+        dir_name =  root_path + '/prediction' + f'/prediction_{batch_i}_{img_i}_{instance}.tif'
+        meta = target[img_i]['geo_meta']
+        # Write prediction to tif
+        with rasterio.open(dir_name, 'w', **meta) as dst:
+                        dst.write(instance_mask)
+
+        # Read tif info to convert to shp
+        with rasterio.open(dir_name, 'r') as src:
+            data = src.read(1)
+            data = data.astype('int16')
+            # Get the shapes of the features in the raster
+            results = [{'geometry': s} for s in rasterio.features.shapes(data, mask=None, transform=src.transform)] # results in list of [RTS, img bbox]
+
+        getdata = 0
+        result_dict = results[getdata]
+
+        # Create a Shapely geometry object
+        geometry_info = result_dict['geometry']
+        shapely_geometry = Polygon(geometry_info[0]['coordinates'][0])  # Access inner list
+
+        # Create a dictionary compatible with Fiona write
+        feature = {
+            'geometry': mapping(shapely_geometry),
+            'properties': {'id': RTS_id}  # You may need to adjust this based on your data
+        }
+        RTS_id+=1
+
+        modelpath = root_path + '/prediction' + "/model_result.shp"
+        if os.path.exists(modelpath):
+            # Create sh
+            with fiona.open(modelpath, mode='a', driver='ESRI Shapefile', schema=my_schema, crs=src.crs) as output:
+                output.write(feature)
+        else:
+            # append RTS
+            with fiona.open(modelpath, mode='w', driver='ESRI Shapefile', schema=my_schema, crs=src.crs) as output:
+                output.write(feature)
+    return RTS_id
+        
+
 
 def unravel_index(index, shape):
     '''
@@ -502,11 +560,9 @@ def postprocess_iou(output, threshold_mask=0.5, iou_min = 0.25):
         transf_mask = output["masks"]
     return transf_box, transf_labels, transf_scores, transf_mask
 
-def postprocess_slope(output, slope_img, min_max, degree_thresh = 25, threshold_mask=0.5, threshold_onslope = 0.8, scaled = False):
+def postprocess_slope(output, slope_img, degree_thresh = 25, threshold_mask=0.5, threshold_onslope = 0.8):
     # Create boolean high_slope where slope is too high to contain RTS.
     # RTS should not appear at slope > 20 -> degree_thresh = 25
-    if scaled:
-        degree_thresh = (degree_thresh-min_max.slope_min[0]) /(min_max.slope_max[0]-min_max.slope_min[0])
     high_slope = slope_img >= degree_thresh
     
     keep_i = []

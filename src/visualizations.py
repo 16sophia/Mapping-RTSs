@@ -309,12 +309,14 @@ def vize_sample(ds, sample_index, model_viz = None, threshold_mask = 0.5, predic
             print(f"Number of detected objects = {num_obj}. Number of real objects = {n_obj}")            
 
             
-def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3):
+def viz_mask(img_org, targ_org, preds_org, img_index, background= True, viz_max = 3, viz_min = -3):
     '''
     Visualizes labeled Mask, predicted mask and its comparison
-    Input: img_org: Tuple of images in batch. Each image has shape [channel, H, W], targ_org: Tuple of labels in batch. One label consists of dictionary with mask entry. Mask shape is [RTS instance, H,W]
-    preds_org: List of predictions, each prediction contains dictionary with mask entry. Mask shape is [RTS instances, channel, H,W]
-    img_index = index of image within batch, viz_max, viz_min = capping value of image for divergent value, default is 3,= -3. otherwise will be scaled: (-3 -img_min)/ (img_max-img_min)
+    Input: 
+        img_org: Tuple of images in batch. Each image has shape [channel, H, W], targ_org: Tuple of labels in batch. One label consists of dictionary with mask entry. Mask shape is [RTS instance, H,W]
+        preds_org: List of predictions, each prediction contains dictionary with mask entry. Mask shape is [RTS instances, channel, H,W]
+        img_index = index of image within batch, viz_max, viz_min = capping value of image for divergent value, default is 3,= -3. otherwise will be scaled: (-3 -img_min)/ (img_max-img_min)
+        background: Whether on third image, a grayscale background image or plain empty background is used. True= use grayscale background
     
     '''
     html_red = '#d7191c'    # Red
@@ -410,9 +412,10 @@ def viz_mask(img_org, targ_org, preds_org, img_index, viz_max = 3, viz_min = -3)
     blended_label[:, :, :3] = np.where(targ_rgb_mask, targ_rgb_viz[:, :, :3], image_RGB[:, :, :3])
     
     targ_tot_img_viz = np.where(targ_tot_img >= 0.5, 0, 1)
-    #plt.imshow(targ_tot_img_viz)
-    #grayscale_matrix = rgb_to_grayscale(blended_label) # blended_label
-    grayscale_matrix = binary_to_grayscale(targ_tot_img_viz)
+    if background:
+        grayscale_matrix = rgb_to_grayscale(blended_label) 
+    else:
+        grayscale_matrix = binary_to_grayscale(targ_tot_img_viz)
 
 
     fig, axs = plt.subplots(1, 2, figsize=(10, 10))

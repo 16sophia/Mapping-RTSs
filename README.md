@@ -10,6 +10,7 @@ The repository includes:
 - Example predictions
 
 ## Repository structure
+```
 .
 ├── README.md
 ├──Data_generation.ipynb
@@ -53,6 +54,7 @@ The repository includes:
 ├──.gitlab-ci.ym
 ├──.renkulfsignore
 └──Dockerfile
-
+```
 ## File description
-"Data_generation.ipynb" 
+`Data_generation.ipynb` ddd ff
+'

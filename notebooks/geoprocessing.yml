@@ -1,0 +1,5 @@
+name: your_environment_name
+channels:
+  - defaults
+  - nvidia
+prefix: C:\Users\sophi\anaconda3\envs\your_environment_name
